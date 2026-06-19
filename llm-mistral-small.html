@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Dodge — Mistral Small</title>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+  <script src="/play-counter.js" data-game="ai-dodge"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0a0b14; display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding-top: 0; margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    .game-wrapper { text-align: center; flex: 1; display: flex; flex-direction: column; justify-content: center; }
+    canvas { border-radius: 12px; }
+    .controls { color: #8892a0; font-size: 0.85em; margin-top: 0.8em; }
+    .controls kbd { background: #1e2035; padding: 2px 8px; border-radius: 4px; border: 1px solid #2a2d4a; color: #e6edf3; }
+    .game-title { color: #f0f6fc; font-size: 1.1em; margin-bottom: 0.5em; }
+  
+  .game-info {
+    max-width: 680px;
+    margin: 0.5em auto;
+    width: 100%;
+  }
+  .game-info details {
+    background: #11131f;
+    border: 1px solid #1e2035;
+    border-radius: 8px;
+    padding: 0.5em 1em;
+    cursor: pointer;
+  }
+  .game-info summary {
+    color: #8892a0;
+    font-size: 0.8em;
+    font-family: sans-serif;
+    cursor: pointer;
+    padding: 0.3em 0;
+  }
+  .game-info summary:hover {
+    color: #00d4ff;
+  }
+  .game-info table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.5em;
+    font-size: 0.78em;
+  }
+  .game-info td {
+    padding: 0.3em 0.6em;
+    border: 1px solid #1e2035;
+    color: #c8d0e0;
+  }
+  .game-info td:first-child {
+    color: #8892a0;
+    font-weight: 600;
+    width: 30%;
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+<header style="position:sticky;top:0;z-index:100;background:rgba(10,11,20,0.92);backdrop-filter:blur(10px);border-bottom:1px solid #181a2a;">
+  <div style="max-width:1100px;margin:0 auto;padding:0.7em 1.5em;display:flex;align-items:center;justify-content:space-between;">
+    <a href="/" style="display:flex;align-items:center;gap:0.4em;text-decoration:none;font-size:1.2em;font-weight:700;color:#f0f6fc;flex-shrink:0;">
+      <span style="color:#ff6b35;font-size:0.9em;filter:drop-shadow(0 0 6px rgba(255,107,53,0.4));">&#9654;</span>
+      <span style="background:linear-gradient(135deg,#ff6b35,#00d4ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">AI Gaming Dev</span>
+    </a>
+    <nav style="flex-shrink:0;margin-left:auto;">
+      <a href="/games/" style="color:#ff6b35;text-decoration:none;font-size:0.9em;font-weight:500;letter-spacing:0.02em;">Play</a>
+    </nav>
+  </div>
+</header>
+<div class="game-wrapper">
+    <div id="game"></div>
+    <div class="controls">Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> &middot; Press <kbd>R</kbd> to restart</div>
+    <em style="display:block;text-align:center;color:#667;font-size:0.7em;">Built by Mistral Small — 6,869 chars, 233 lines</em>
+  </div>
+<div class="game-info">
+    <details>
+      <summary>Build Info: Mistral Small — 6,869 chars in 11.5s</summary>
+      <table>
+        <tr><td>Model</td><td>Mistral Small</td></tr>
+        <tr><td>Provider</td><td>Mistral API</td></tr>
+        <tr><td>Model ID</td><td style="font-family:monospace;font-size:0.85em;color:#8892a0;">mistral-small-latest</td></tr>
+        <tr><td>Temperature</td><td>0.4</td></tr>
+        <tr><td>Max Tokens</td><td>4,096</td></tr>
+        <tr><td>Total Tokens</td><td>1,754</td></tr>
+        <tr><td>Build Time</td><td>11.5s</td></tr>
+        <tr><td>Output Size</td><td>6,869 chars / 233 lines</td></tr>
+        <tr><td>Cost</td><td>$0</td></tr>
+        <tr><td>Notes</td><td style="color:#ff6b35;">Cleanest output — no bugs on first try</td></tr>
+        
+      <tr><td>Source</td><td><a href="https://raw.githubusercontent.com/driphtyio/ai-dodge/main/llm-mistral-small.html" style="color:#00d4ff;">View Game</a> &middot; <a href="https://raw.githubusercontent.com/driphtyio/ai-dodge/main/llm-mistral-small.html" style="color:#8892a0;">View Source</a></td></tr>
+</table>
+    </details>
+  </div>
+
+  <script>
+    const W = 680, H = 480;
+
+    class GameScene extends Phaser.Scene {
+      constructor() {
+        super({ key: 'GameScene' });
+      }
+
+      preload() {
+        // Generate circle textures so physics.sprites work reliably
+        let g;
+
+        g = this.make.graphics({ add: false });
+        g.fillStyle(0xffffff);
+        g.fillCircle(16, 16, 14);
+        g.generateTexture('player', 32, 32);
+        g.destroy();
+
+        g = this.make.graphics({ add: false });
+        g.fillStyle(0xffffff);
+        g.fillCircle(16, 16, 16);
+        g.generateTexture('enemy', 32, 32);
+        g.destroy();
+      }
+
+      create() {
+        this.score = 0;
+        this.gameOver = false;
+
+        // Bot mode via URL param ?bot=true (math) or ?bot=llm or ?bot=llm:provider/model
+        var botParam = new URLSearchParams(window.location.search).get('bot') || '';
+        this.botMode = botParam === 'true';
+        this.llmMode = botParam.startsWith('llm');
+        this.llmModel = botParam.split(':').slice(1).join(':') || 'groq/llama-3.3-70b-versatile';
+
+        // Bot state
+        this.botTimer = 0;
+        this.botDir = { x: 0, y: 0 };
+        this.llmDir = { dx: 0, dy: 0 };
+        this.llmTimer = 0;
+
+        // Player physics sprite (white texture, tinted blue)
+        this.player = this.physics.add.sprite(W/2, H/2, 'player');
+        this.player.setTint(0x00d4ff);
+        this.player.setCircle(14);
+        this.player.setCollideWorldBounds(true);
+
+        // Pulse tween (tint alpha, not sprite alpha — keeps sprite visible)
+        this.tweens.add({
+          targets: this.player,
+          alpha: 0.6,
+          yoyo: true,
+          repeat: -1,
+          duration: 800,
+          ease: 'Sine.easeInOut'
+        });
+
+        // Enemies group
+        this.enemies = this.physics.add.group();
+
+        // UI text
+        this.scoreText = this.add.text(12, 12, 'Score: 0', {
+          font: '18px monospace',
+          fill: '#8892a0'
+        }).setScrollFactor(0).setDepth(10);
+
+        this.gameOverText = this.add.text(W/2, H/2, '', {
+          font: '24px monospace',
+          fill: '#ff6b35',
+          align: 'center',
+          lineSpacing: 8
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(10);
+
+        // Input
+        this.cursors = this.input.keyboard.createCursorKeys();
+        const K = Phaser.Input.Keyboard.KeyCodes;
+        this.keyW = this.input.keyboard.addKey(K.W);
+        this.keyA = this.input.keyboard.addKey(K.A);
+        this.keyS = this.input.keyboard.addKey(K.S);
+        this.keyD = this.input.keyboard.addKey(K.D);
+
+        // Restart on R
+        this.input.keyboard.on('keydown-R', () => {
+          if (this.gameOver) this.scene.restart();
+        });
+
+        // Spawn enemies
+        this.spawnTimer = this.time.addEvent({
+          delay: 2200,
+          callback: () => this.spawnEnemy(),
+          loop: true
+        });
+
+        // Score
+        this.time.addEvent({
+          delay: 1000,
+          callback: () => {
+            if (!this.gameOver) {
+              this.score++;
+              this.scoreText.setText('Score: ' + this.score);
+            }
+          },
+          loop: true
+        });
+
+        // Initial enemies
+        for (let i = 0; i < 3; i++) this.spawnEnemy();
+      }
+
+      spawnEnemy() {
+        if (this.gameOver) return;
+        const side = Phaser.Math.Between(0, 3);
+        let x, y;
+        switch (side) {
+          case 0: x = Phaser.Math.Between(0, W); y = -20; break;
+          case 1: x = W + 20; y = Phaser.Math.Between(0, H); break;
+          case 2: x = Phaser.Math.Between(0, W); y = H + 20; break;
+          case 3: x = -20; y = Phaser.Math.Between(0, H); break;
+        }
+        const size = Phaser.Math.Between(8, 16);
+        const enemy = this.physics.add.sprite(x, y, 'enemy');
+        enemy.setTint(0xff6b35);
+        enemy.setCircle(size);
+        // Scale the sprite to match the size (texture is 32x32, radius 16)
+        const scale = (size * 2) / 32;
+        enemy.setScale(scale);
+        enemy.setData('size', size);
+        this.enemies.add(enemy);
+      }
+
+      update(time) {
+        if (this.gameOver) return;
+
+        // Player movement
+        const speed = 200;
+        let vx = 0, vy = 0;
+
+        if (this.llmMode) {
+          // LLM bot — call API every ~800ms for decision
+          if (time > this.llmTimer) {
+            this.llmTimer = time + 800;
+            var nearest = null, nearDist = Infinity;
+            this.enemies.getChildren().forEach(function(e) {
+              var d = Phaser.Math.Distance.Between(this.player.x, this.player.y, e.x, e.y);
+              if (d < nearDist) { nearDist = d; nearest = e; }
+            }.bind(this));
+
+            if (nearest) {
+              fetch('/api/bot-brain', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  player: { x: this.player.x, y: this.player.y },
+                  nearest: { x: nearest.x, y: nearest.y, d: nearDist },
+                  score: this.score,
+                  model: this.llmModel,
+                  walls: {
+                    nearLeft: this.player.x < 60,
+                    nearRight: this.player.x > 620,
+                    nearTop: this.player.y < 60,
+                    nearBottom: this.player.y > 420
+                  }
+                })
+              }).then(function(r) { return r.json(); }).then(function(d) {
+                if (d.dx !== undefined) this.llmDir = d;
+              }.bind(this)).catch(function() { /* fall through to last known direction */ });
+            }
+          }
+          vx = this.llmDir.dx * speed;
+          vy = this.llmDir.dy * speed;
+        } else if (this.botMode) {
+          // Bot steering — dodge nearest enemy
+          const enemies = this.enemies.getChildren();
+          let nearest = null, nearDist = Infinity;
+          enemies.forEach(e => {
+            const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, e.x, e.y);
+            if (d < nearDist) { nearDist = d; nearest = e; }
+          });
+
+          // Redraw direction every ~0.5-1.5s for random wander
+          if (time > this.botTimer) {
+            this.botTimer = time + Phaser.Math.Between(500, 1500);
+            this.botDir = { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 };
+            // Normalize wander direction
+            const len = Math.sqrt(this.botDir.x ** 2 + this.botDir.y ** 2) || 1;
+            this.botDir.x /= len;
+            this.botDir.y /= len;
+          }
+
+          if (nearest && nearDist < 130) {
+            // Flee from nearest enemy (steer opposite direction with extra weight)
+            const dx = this.player.x - nearest.x;
+            const dy = this.player.y - nearest.y;
+            const d = Math.sqrt(dx * dx + dy * dy) || 1;
+            const fleeWeight = Math.max(0, (130 - nearDist) / 130); // panic more when closer
+            // Blend flee vector with wander vector
+            vx = (dx / d) * speed * fleeWeight + this.botDir.x * speed * (1 - fleeWeight * 0.7);
+            vy = (dy / d) * speed * fleeWeight + this.botDir.y * speed * (1 - fleeWeight * 0.7);
+          } else {
+            // No threat — wander
+            vx = this.botDir.x * speed * 0.6;
+            vy = this.botDir.y * speed * 0.6;
+          }
+
+          // Avoid edges — steer toward center when near walls
+          const margin = 60;
+          if (this.player.x < margin) vx += speed * 0.5;
+          if (this.player.x > W - margin) vx -= speed * 0.5;
+          if (this.player.y < margin) vy += speed * 0.5;
+          if (this.player.y > H - margin) vy -= speed * 0.5;
+
+          // Clamp speed
+          const maxSpeed = 220;
+          const currentSpeed = Math.sqrt(vx * vx + vy * vy);
+          if (currentSpeed > maxSpeed) {
+            vx = (vx / currentSpeed) * maxSpeed;
+            vy = (vy / currentSpeed) * maxSpeed;
+          }
+        } else {
+          // Keyboard input
+          if (this.cursors.left.isDown || this.keyA.isDown) vx = -speed;
+          if (this.cursors.right.isDown || this.keyD.isDown) vx = speed;
+          if (this.cursors.up.isDown || this.keyW.isDown) vy = -speed;
+          if (this.cursors.down.isDown || this.keyS.isDown) vy = speed;
+        }
+        this.player.body.setVelocity(vx, vy);
+
+        // Enemy AI
+        const baseSpeed = 60 + Math.min(this.score * 2, 100);
+
+        this.enemies.getChildren().forEach(enemy => {
+          const dx = this.player.x - enemy.x;
+          const dy = this.player.y - enemy.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist > 1) {
+            const jx = (Math.random() - 0.5) * 20;
+            const jy = (Math.random() - 0.5) * 20;
+            enemy.body.setVelocity(
+              ((dx + jx) / dist) * baseSpeed,
+              ((dy + jy) / dist) * baseSpeed
+            );
+          } else {
+            enemy.body.setVelocity(0, 0);
+          }
+
+          // Collision
+          const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, enemy.x, enemy.y);
+          if (d < 14 + enemy.getData('size')) {
+            this.gameOver = true;
+            this.player.body.setVelocity(0, 0);
+            this.player.setTint(0xff3333);
+            this.enemies.getChildren().forEach(e => {
+              e.body.setVelocity(0, 0);
+              e.setTint(0x444466);
+            });
+            this.scoreText.setText('Score: ' + this.score);
+            this.gameOverText.setText('Game Over! Score: ' + this.score + '\nPress R to restart');
+
+            // Telemetry — fire GoatCounter event on death
+            try {
+              var modeTag = this.llmMode ? ('llm.' + this.llmModel) : (this.botMode ? 'math' : 'human');
+              var deathPath = 'play:ai-dodge:' + modeTag + ':s' + this.score + ':e' + this.enemies.countActive();
+              if (window.goatcounter && goatcounter.count) {
+                goatcounter.count({ path: deathPath, event: true, title: 'Death: ' + this.score });
+              }
+            } catch(e) {}
+          }
+        });
+      }
+    }
+
+    new Phaser.Game({
+      type: Phaser.AUTO,
+      width: W,
+      height: H,
+      parent: 'game',
+      backgroundColor: '#0f1120',
+      physics: {
+        default: 'arcade',
+        arcade: { gravity: { y: 0 } }
+      },
+      scene: [GameScene]
+    });
+  </script>
+</body>
+</html>
