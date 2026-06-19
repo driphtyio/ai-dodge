@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Dodge - Playable Demo</title>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0a0b14; display: flex; justify-content: center; align-items: center; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    .game-wrapper { text-align: center; }
+    canvas { border-radius: 12px; }
+    .controls { color: #8892a0; font-size: 0.85em; margin-top: 0.8em; }
+    .controls kbd { background: #1e2035; padding: 2px 8px; border-radius: 4px; border: 1px solid #2a2d4a; color: #e6edf3; }
+    .game-title { color: #f0f6fc; font-size: 1.1em; margin-bottom: 0.5em; }
+  </style>
+</head>
+<body>
+  <div class="game-wrapper">
+    <div class="game-title">AI Dodge — Survive the AI Hunters</div>
+    <div id="game"></div>
+    <div class="controls">Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrow keys</div>
+  </div>
+
+  <script>
+    const W = 680, H = 480;
+
+    class GameScene extends Phaser.Scene {
+      constructor() {
+        super({ key: 'GameScene' });
+      }
+
+      preload() {
+        // Generate circle textures so physics.sprites work reliably
+        let g;
+
+        g = this.make.graphics({ add: false });
+        g.fillStyle(0xffffff);
+        g.fillCircle(16, 16, 14);
+        g.generateTexture('player', 32, 32);
+        g.destroy();
+
+        g = this.make.graphics({ add: false });
+        g.fillStyle(0xffffff);
+        g.fillCircle(16, 16, 16);
+        g.generateTexture('enemy', 32, 32);
+        g.destroy();
+      }
+
+      create() {
+        this.score = 0;
+        this.gameOver = false;
+
+        // Player physics sprite (white texture, tinted blue)
+        this.player = this.physics.add.sprite(W/2, H/2, 'player');
+        this.player.setTint(0x00d4ff);
+        this.player.setCircle(14);
+        this.player.setCollideWorldBounds(true);
+
+        // Pulse tween (tint alpha, not sprite alpha — keeps sprite visible)
+        this.tweens.add({
+          targets: this.player,
+          alpha: 0.6,
+          yoyo: true,
+          repeat: -1,
+          duration: 800,
+          ease: 'Sine.easeInOut'
+        });
+
+        // Enemies group
+        this.enemies = this.physics.add.group();
+
+        // UI text
+        this.scoreText = this.add.text(12, 12, 'Score: 0', {
+          font: '18px monospace',
+          fill: '#8892a0'
+        }).setScrollFactor(0).setDepth(10);
+
+        this.gameOverText = this.add.text(W/2, H/2, '', {
+          font: '24px monospace',
+          fill: '#ff6b35',
+          align: 'center',
+          lineSpacing: 8
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(10);
+
+        // Input
+        this.cursors = this.input.keyboard.createCursorKeys();
+        const K = Phaser.Input.Keyboard.KeyCodes;
+        this.keyW = this.input.keyboard.addKey(K.W);
+        this.keyA = this.input.keyboard.addKey(K.A);
+        this.keyS = this.input.keyboard.addKey(K.S);
+        this.keyD = this.input.keyboard.addKey(K.D);
+
+        // Restart on R
+        this.input.keyboard.on('keydown-R', () => {
+          if (this.gameOver) this.scene.restart();
+        });
+
+        // Spawn enemies
+        this.spawnTimer = this.time.addEvent({
+          delay: 2200,
+          callback: () => this.spawnEnemy(),
+          loop: true
+        });
+
+        // Score
+        this.time.addEvent({
+          delay: 1000,
+          callback: () => {
+            if (!this.gameOver) {
+              this.score++;
+              this.scoreText.setText('Score: ' + this.score);
+            }
+          },
+          loop: true
+        });
+
+        // Initial enemies
+        for (let i = 0; i < 3; i++) this.spawnEnemy();
+      }
+
+      spawnEnemy() {
+        if (this.gameOver) return;
+        const side = Phaser.Math.Between(0, 3);
+        let x, y;
+        switch (side) {
+          case 0: x = Phaser.Math.Between(0, W); y = -20; break;
+          case 1: x = W + 20; y = Phaser.Math.Between(0, H); break;
+          case 2: x = Phaser.Math.Between(0, W); y = H + 20; break;
+          case 3: x = -20; y = Phaser.Math.Between(0, H); break;
+        }
+        const size = Phaser.Math.Between(8, 16);
+        const enemy = this.physics.add.sprite(x, y, 'enemy');
+        enemy.setTint(0xff6b35);
+        enemy.setCircle(size);
+        // Scale the sprite to match the size (texture is 32x32, radius 16)
+        const scale = (size * 2) / 32;
+        enemy.setScale(scale);
+        enemy.setData('size', size);
+        this.enemies.add(enemy);
+      }
+
+      update() {
+        if (this.gameOver) return;
+
+        // Player movement
+        const speed = 200;
+        let vx = 0, vy = 0;
+        if (this.cursors.left.isDown || this.keyA.isDown) vx = -speed;
+        if (this.cursors.right.isDown || this.keyD.isDown) vx = speed;
+        if (this.cursors.up.isDown || this.keyW.isDown) vy = -speed;
+        if (this.cursors.down.isDown || this.keyS.isDown) vy = speed;
+        this.player.body.setVelocity(vx, vy);
+
+        // Enemy AI
+        const baseSpeed = 60 + Math.min(this.score * 2, 100);
+
+        this.enemies.getChildren().forEach(enemy => {
+          const dx = this.player.x - enemy.x;
+          const dy = this.player.y - enemy.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist > 1) {
+            const jx = (Math.random() - 0.5) * 20;
+            const jy = (Math.random() - 0.5) * 20;
+            enemy.body.setVelocity(
+              ((dx + jx) / dist) * baseSpeed,
+              ((dy + jy) / dist) * baseSpeed
+            );
+          } else {
+            enemy.body.setVelocity(0, 0);
+          }
+
+          // Collision
+          const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, enemy.x, enemy.y);
+          if (d < 14 + enemy.getData('size')) {
+            this.gameOver = true;
+            this.player.body.setVelocity(0, 0);
+            this.player.setTint(0xff3333);
+            this.enemies.getChildren().forEach(e => {
+              e.body.setVelocity(0, 0);
+              e.setTint(0x444466);
+            });
+            this.scoreText.setText('Score: ' + this.score);
+            this.gameOverText.setText('Game Over! Score: ' + this.score + '\nPress R to restart');
+          }
+        });
+      }
+    }
+
+    new Phaser.Game({
+      type: Phaser.AUTO,
+      width: W,
+      height: H,
+      parent: 'game',
+      backgroundColor: '#0f1120',
+      physics: {
+        default: 'arcade',
+        arcade: { gravity: { y: 0 } }
+      },
+      scene: [GameScene]
+    });
+  </script>
+</body>
+</html>
